@@ -1,7 +1,5 @@
 from ai import AI
-
-
-class SelfplayEngine:
-
+from game import GameEngine
 
 class TrainAI:
+    def __init__(self)
