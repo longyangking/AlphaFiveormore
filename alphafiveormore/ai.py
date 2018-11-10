@@ -5,6 +5,7 @@ from keras.models import Model
 from keras.layers import Input, Dense, Conv2D, Flatten, BatchNormalization, Activation, LeakyReLU, Add
 from keras.optimizers import SGD, Adam
 from keras import regularizers
+from keras import initializers
 import keras.backend as K
 
 import tensorflow as tf
@@ -36,10 +37,42 @@ class NeuralNetwork:
     def build_icm_model(self):
 
     def __conv_block(self, x, filters, kernel_size):
+        out = Conv2D(
+            filters,
+            kernel_size=kernel_size,
+            padding='same',
+            activation='linear',
+            kernel_initializer=initializers.lecun_normal(),
+            kernel_constraints=regularizers.l2(self.l2_const)
+        )(x)
+        out = BatchNormalization(axis=1, momentum=0.9)(out)
+        out = LeakyReLU(alpha=0.1)(out)
+        return out
 
     def __res_block(self, x, filters, kernel_size):
+        out = Conv2D(
+            filters,
+            kernel_size=kernel_size,
+            padding='same',
+            activation='linear',
+            kernel_initializer=initializers.glorot_normal(),
+            kernel_constraints=regularizers.l2(self.l2_const)
+        )(x)
+        out = BatchNormalization(axis=1, momentum=0.9)(out)
+        out = Add()([out, x])
+        out = LeakyReLU(alpha=0.1)(out)
+        return out
 
     def __dense_block(self, x, units):
+        out = Dense(
+            units,
+            activation=None, 
+            use_bias=False, 
+            kernel_initializer='glorot_uniform', 
+            kernel_regularizer=regularizers.l2(self.l2_const)
+        )(x)
+        out = LeakyReLU(alpha=0.1)(out)
+        return out
 
     def __action_Q_block(self, x):
 

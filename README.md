@@ -1,6 +1,8 @@
 # AlphaFiveormore
 Play "Five or More" game with Artificial intelligence
 
+![](./pics/fiveormore.png)
+
 ## Features
 + Home-made ["Five or More"](https://wiki.gnome.org/Apps/Five%20or%20more) game
 + Curiosity-driven Exploration by Self-supervised Prediction [1,2]
