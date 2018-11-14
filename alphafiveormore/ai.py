@@ -2,7 +2,7 @@ from __future__ import print_function
 
 import keras
 from keras.models import Model
-from keras.layers import Input, Dense, Conv2D, Flatten, BatchNormalization, Activation, LeakyReLU, Add
+from keras.layers import Input, Dense, Conv2D, Flatten, BatchNormalization, Activation, LeakyReLU, Add, Concatenate
 from keras.optimizers import SGD, Adam
 from keras import regularizers
 from keras import initializers
@@ -30,11 +30,118 @@ class NeuralNetwork:
         self.verbose = verbose
 
         self.action_model = self.build_action_model()
-        self.icm_model = self.build_icm_model()
+        self.feature_model = self.build_feature_model()
+        self.forward_model = self.build_forward_model()
+        self.inverse_model = self.build_inverse_model()
+
+        self.action_model.compile(
+            loss='mse',
+            optimizer='adam'
+        )
+
+        state_tensor_t = Input(shape=self.input_shape)
+        state_tensor_t1 = Input(shape=self.input_shape)
+        action_tensor = Input(shape=(self.output_dim,))
+
+        feature_tensor_t = self.feature_model(state_tensor_t)
+        feature_tensor_t1 = self.feature_model(state_tensor_t1)
+
+        predict_action_tensor = self.inverse_model([feature_tensor_t, feature_tensor_t1])
+
+        self.train_inverse_model = Model(inputs=[state_tensor_t, state_tensor_t1], outputs=action_tensor)
+        self.train_inverse_model.compile(
+            loss='mse',
+            optimizer='adam'
+        )
+
+        feature_tensor_t = Input(shape=(self.feature_dim,))
+        action_tensor = Input(shape=(self.action_dim,))
+
+        predict_feature_tensor_t1 = self.forward_model([action_tensor, feature_tensor_t])
+
+        self.train_forward_model = Model(inputs=[action_tensor, feature_tensor_t], outputs=predict_feature_tensor_t1)
+        self.train_forward_model.compile(
+            loss='mse',
+            optimizer='adam'
+        )
 
     def build_action_model(self):
+        state_tensor = Input(shape=self.input_shape)
 
-    def build_icm_model(self):
+        out = self.__conv_block(state_tensor, filters=64, kernel_size=3)
+        out = self.__res_block(out, filters=64, kernel_size=3)
+        out = self.__res_block(out, filters=64, kernel_size=3)
+        out = self.__res_block(out, filters=64, kernel_size=3)
+        out = self.__res_block(out, filters=64, kernel_size=3)
+
+        out = Flatten()(out)
+        out = self.__dense_block(units=200)
+        out = self.__dense_block(units=200)
+        action_tensor = Dense(
+            self.output_dim,
+            self.feature_dim,
+            activation='sigmoid', 
+            use_bias=False, 
+            kernel_initializer='glorot_uniform', 
+            kernel_regularizer=regularizers.l2(self.l2_const)
+        )(out)
+        
+        return Model(inputs=state_tensor, outputs=action_tensor)
+
+    def build_feature_model(self):
+        state_tensor = Input(shape=self.input_shape)
+
+        out = self.__conv_block(state_tensor, filters=64, kernel_size=3)
+        out = self.__conv_block(out, filters=64, kernel_size=3)
+        out = self.__conv_block(out, filters=64, kernel_size=3)
+        out = Flatten()(out)
+        out = self.__dense_block(out, units=180)
+        feature_tensor = Dense(
+            self.feature_dim, 
+            activation='sigmoid', 
+            use_bias=False, 
+            kernel_initializer='glorot_uniform', 
+            kernel_regularizer=regularizers.l2(self.l2_const)
+        )(out)
+
+        return Model(inputs=state_tensor, outputs=feature_tensor)
+
+    def build_forward_model(self):
+        feature_tensor = Input(shape=(self.feature_dim,))
+        action_tensor = Input(shape=(self.output_dim,))
+
+        out = Concatenate()([feature_tensor, action_tensor])
+        out = self.__dense_block(out, 180)
+        out = self.__dense_block(out, 180)
+        
+        predict_feature_tensor = Dense(
+            self.feature_dim,
+            activation='sigmoid', 
+            use_bias=False, 
+            kernel_initializer='glorot_uniform', 
+            kernel_regularizer=regularizers.l2(self.l2_const)
+        )(out)
+
+        return Model(inputs=[action_tensor, feature_tensor], outputs=predict_feature_tensor)
+
+    def build_inverse_model(self):
+        feature_tensor_t = Input(shape=(self.feature_dim,))
+        feature_tensor_t1 = Input(shape=(self.feature_dim,))
+
+        out = Concatenate()([feature_tensor_t, feature_tensor_t1])
+        out = self.__dense_block(out, 180)
+        out = self.__dense_block(out, 180)
+        out = self.__dense_block(out, 180)
+
+        action_tensor = Dense(
+            self.action_dim,
+            activation='sigmoid', 
+            use_bias=False, 
+            kernel_initializer='glorot_uniform', 
+            kernel_regularizer=regularizers.l2(self.l2_const)
+        )(out)
+
+        return Model(inputs=[feature_tensor_t, feature_tensor_t1], outputs=action_tensor)
 
     def __conv_block(self, x, filters, kernel_size):
         out = Conv2D(
@@ -74,24 +181,31 @@ class NeuralNetwork:
         out = LeakyReLU(alpha=0.1)(out)
         return out
 
-    def __action_Q_block(self, x):
-
-    def __feature_block(self, x):
-
-    def __intrinsic_block(self, x, y):
-
     def fit(self, dataset, epochs, batch_size):
+        pass
 
     def update(self, dataset):
+        pass
 
     def predict(self, state):
+        pass
 
     def save_model(self, filename):
+        pass
 
     def load_model(self, filename):
+        pass
 
     def plot_model(self, filename):
-
+        from keras.utils import plot_model
+        plot_model(self.action_model, show_shapes=True, to_file='{filename}_{modelname}.png'.format(filename=filename,modelname='action_model'))
+        plot_model(self.feature_model, show_shapes=True, to_file='{filename}_{modelname}.png'.format(filename=filename,modelname='feature_model'))
+        plot_model(self.forward_model, show_shapes=True, to_file='{filename}_{modelname}.png'.format(filename=filename,modelname='forward_model'))
+        plot_model(self.inverse_model, show_shapes=True, to_file='{filename}_{modelname}.png'.format(filename=filename,modelname='inverse_model'))
+        
+        plot_model(self.train_forward_model, show_shapes=True, to_file='{filename}_{modelname}.png'.format(filename=filename,modelname='train_forward_model'))
+        plot_model(self.train_inverse_model, show_shapes=True, to_file='{filename}_{modelname}.png'.format(filename=filename,modelname='train_inverse_model'))
+        
 class AI:
     '''
     The main AI model class
