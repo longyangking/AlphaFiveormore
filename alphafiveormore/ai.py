@@ -18,7 +18,7 @@ class NeuralNetwork:
     Deep Q network with Intrinsic Curiosity Module (ICM)
     '''
     def __init__(self, input_shape, output_dim, network_structure, feature_dim=30, 
-        learning_rate=1e-3, l2_const=1e-4, verbose=False
+        learning_rate=1e-3, l2_const=1e-4, eta=1.0, verbose=False
     ):
         self.input_shape = input_shape
         self.output_dim = output_dim
@@ -27,6 +27,7 @@ class NeuralNetwork:
 
         self.learning_rate = learning_rate
         self.l2_const = l2_const
+        self.eta = eta
         self.verbose = verbose
 
         self.action_model = self.build_action_model()
@@ -182,13 +183,44 @@ class NeuralNetwork:
         return out
 
     def fit(self, dataset, epochs, batch_size):
-        pass
+        states, action_probs, states_next = dataset
+
+        if self.verbose:
+            print("Updating neural network with epochs [{0}] and batch_size [{1}].".format(epochs, batch_size))
+
+        if self.verbose:
+            print("Updating neural network of action model...")
+        self.action_model.fit(states, action_probs, epochs=epochs, batch_size=batch_size, verbose=self.verbose)
+
+        if self.verbose:
+            print("Updating neural network of inverse model...")
+        self.train_inverse_model.fit([states, states_next], action_probs, epochs=epochs, batch_size=batch_size, verbose=self.verbose)
+
+        if self.verbose:
+            print("Updating neural network of forward model...")
+        features = self.feature_model.predict(states)
+        features_next = self.feature_model.predict(states_next)
+        self.train_forward_model.fit([action_probs, features], features_next, epochs=epochs, batch_size=batch_size, verbose=self.verbose)
+
+        if self.verbose:
+            print("End of updating neural network.")
+
+    def get_intrinsic_rewards(self, states_set):
+        states, action_probs, states_next = dataset
+        features = self.feature_model.predict(states)
+        features_next = self.feature_model.predict(states_next)
+        features_next_predict = self.forward_model.predict([action_probs, features])
+
+        intrinsic_rewards = self.eta/2*np.sum(np.abs(features_next - features_next_predict), axis=1)
+        return intrinsic_rewards
 
     def update(self, dataset):
         pass
 
     def predict(self, state):
-        pass
+        states = np.array(state).reshape(1, *self.input_shape)
+        action_probs = self.action_model.predict(states)
+        return action_probs[0]
 
     def save_model(self, filename):
         pass
