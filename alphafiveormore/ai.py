@@ -67,17 +67,25 @@ class NeuralNetwork:
         )
 
     def build_action_model(self):
+        network_structure = self.network_structure['action_model']
+
         state_tensor = Input(shape=self.input_shape)
+        if len(network_structure) == 0:
+            raise Exception("No structure for action model!")
+        
+        out = self.__conv_block(state_tensor, filters=network_structure[0]['filters'], kernel_size=network_structure[0]['kernel_size'])
+        is_flatten = False
+        if len(network_structure) > 1:
+            for structure in network_structure:
+                if 'filters' in structure:
+                    out = self.__res_block(out, filters=structure['filters'], kernel_size=structure['kernel_size'])
+                elif 'units' in structure:
+                    if not is_flatten:
+                        out = Flatten()(out)
+                        is_flatten = True
+                    else:
+                        out = self.__dense_block(units=structure['units'])
 
-        out = self.__conv_block(state_tensor, filters=64, kernel_size=3)
-        out = self.__res_block(out, filters=64, kernel_size=3)
-        out = self.__res_block(out, filters=64, kernel_size=3)
-        out = self.__res_block(out, filters=64, kernel_size=3)
-        out = self.__res_block(out, filters=64, kernel_size=3)
-
-        out = Flatten()(out)
-        out = self.__dense_block(units=200)
-        out = self.__dense_block(units=200)
         action_tensor = Dense(
             self.output_dim,
             self.feature_dim,
@@ -90,13 +98,25 @@ class NeuralNetwork:
         return Model(inputs=state_tensor, outputs=action_tensor)
 
     def build_feature_model(self):
-        state_tensor = Input(shape=self.input_shape)
+        network_structure = self.network_structure['feature_model']
 
-        out = self.__conv_block(state_tensor, filters=64, kernel_size=3)
-        out = self.__conv_block(out, filters=64, kernel_size=3)
-        out = self.__conv_block(out, filters=64, kernel_size=3)
-        out = Flatten()(out)
-        out = self.__dense_block(out, units=180)
+        state_tensor = Input(shape=self.input_shape)
+        if len(network_structure) == 0:
+            raise Exception("No structure for feature model!")
+        
+        out = self.__conv_block(state_tensor, filters=network_structure[0]['filters'], kernel_size=network_structure[0]['kernel_size'])
+        is_flatten = False
+        if len(network_structure) > 1:
+            for structure in network_structure:
+                if 'filters' in structure:
+                    out = self.__res_block(out, filters=structure['filters'], kernel_size=structure['kernel_size'])
+                elif 'units' in structure:
+                    if not is_flatten:
+                        out = Flatten()(out)
+                        is_flatten = True
+                    else:
+                        out = self.__dense_block(units=structure['units'])
+
         feature_tensor = Dense(
             self.feature_dim, 
             activation='sigmoid', 
@@ -108,12 +128,17 @@ class NeuralNetwork:
         return Model(inputs=state_tensor, outputs=feature_tensor)
 
     def build_forward_model(self):
+        network_structure = self.network_structure['forward_model']
+
         feature_tensor = Input(shape=(self.feature_dim,))
         action_tensor = Input(shape=(self.output_dim,))
 
         out = Concatenate()([feature_tensor, action_tensor])
-        out = self.__dense_block(out, 180)
-        out = self.__dense_block(out, 180)
+
+        if len(network_structure) == 0:
+            raise Exception("No structure for forward model!")
+        for structure in network_structure:
+            out = self.__dense_block(out, structure['units'])
         
         predict_feature_tensor = Dense(
             self.feature_dim,
@@ -126,13 +151,17 @@ class NeuralNetwork:
         return Model(inputs=[action_tensor, feature_tensor], outputs=predict_feature_tensor)
 
     def build_inverse_model(self):
+        network_structure = self.network_structure['forward_model']
+        
         feature_tensor_t = Input(shape=(self.feature_dim,))
         feature_tensor_t1 = Input(shape=(self.feature_dim,))
 
         out = Concatenate()([feature_tensor_t, feature_tensor_t1])
-        out = self.__dense_block(out, 180)
-        out = self.__dense_block(out, 180)
-        out = self.__dense_block(out, 180)
+
+        if len(network_structure) == 0:
+            raise Exception("No structure for feature model!")
+        for structure in network_structure:
+            out = self.__dense_block(out, structure['units'])
 
         action_tensor = Dense(
             self.action_dim,
@@ -215,20 +244,52 @@ class NeuralNetwork:
         return intrinsic_rewards
 
     def update(self, dataset):
-        pass
+        states, action_probs, states_next = dataset
+
+        if self.verbose:
+            print("Updating neural network on batch (Usually for mini-batch trainning).")
+
+        if self.verbose:
+            print("Updating neural network of action model...")
+        self.action_model.train_on_batch(states, action_probs)
+
+        if self.verbose:
+            print("Updating neural network of inverse model...")
+        self.train_inverse_model.train_on_batch([states, states_next], action_probs)
+
+        if self.verbose:
+            print("Updating neural network of forward model...")
+        features = self.feature_model.predict(states)
+        features_next = self.feature_model.predict(states_next)
+        self.train_forward_model.train_on_batch([action_probs, features], features_next)
+
+        if self.verbose:
+            print("End of updating neural network on batch.")
 
     def predict(self, state):
         states = np.array(state).reshape(1, *self.input_shape)
         action_probs = self.action_model.predict(states)
         return action_probs[0]
 
-    def save_model(self, filename):
-        pass
+    def save_models(self, filename):
+        self.action_model.save_weights('{filename}_{modelname}.h5'.format(filename=filename,modelname='action_model'))
+        self.feature_model.save_weights('{filename}_{modelname}.h5'.format(filename=filename,modelname='feature_model'))
+        self.forward_model.save_weights('{filename}_{modelname}.h5'.format(filename=filename,modelname='forward_model'))
+        self.inverse_model.save_weights('{filename}_{modelname}.h5'.format(filename=filename,modelname='inverse_model'))
+        
+        self.train_forward_model.save_weights('{filename}_{modelname}.h5'.format(filename=filename,modelname='train_forward_model'))
+        self.train_inverse_model.save_weights('{filename}_{modelname}.h5'.format(filename=filename,modelname='train_inverse_model'))
 
-    def load_model(self, filename):
-        pass
+    def load_models(self, filename):
+        self.action_model.load_weights('{filename}_{modelname}.h5'.format(filename=filename,modelname='action_model'))
+        self.feature_model.load_weights('{filename}_{modelname}.h5'.format(filename=filename,modelname='feature_model'))
+        self.forward_model.load_weights('{filename}_{modelname}.h5'.format(filename=filename,modelname='forward_model'))
+        self.inverse_model.load_weights('{filename}_{modelname}.h5'.format(filename=filename,modelname='inverse_model'))
+        
+        self.train_forward_model.load_weights('{filename}_{modelname}.h5'.format(filename=filename,modelname='train_forward_model'))
+        self.train_inverse_model.load_weights('{filename}_{modelname}.h5'.format(filename=filename,modelname='train_inverse_model'))
 
-    def plot_model(self, filename):
+    def plot_models(self, filename):
         from keras.utils import plot_model
         plot_model(self.action_model, show_shapes=True, to_file='{filename}_{modelname}.png'.format(filename=filename,modelname='action_model'))
         plot_model(self.feature_model, show_shapes=True, to_file='{filename}_{modelname}.png'.format(filename=filename,modelname='feature_model'))
@@ -247,16 +308,68 @@ class AI:
         self.action_dim = action_dim
         self.verbose = verbose
 
-    def train(self, dataset):
+        network_structure = dict()
+        network_structure['action_model'] = list()
+        # Action model parameters
+        network_structure['action_model'].append({"filters":64, "kernel_size":3})
+        network_structure['action_model'].append({"filters":64, "kernel_size":3})
+        network_structure['action_model'].append({"filters":64, "kernel_size":3})
+        network_structure['action_model'].append({"filters":64, "kernel_size":3})
+        network_structure['action_model'].append({"units":256})
+        network_structure['action_model'].append({"units":256})
+        # Feature model parameters
+        network_structure['feature_model'] = list()
+        network_structure['feature_model'].append({"filters":64, "kernel_size":3})
+        network_structure['feature_model'].append({"filters":64, "kernel_size":3})
+        network_structure['feature_model'].append({"filters":64, "kernel_size":3})
+        network_structure['feature_model'].append({"units":256})
+        network_structure['feature_model'].append({"units":256})
+        # Forward model parameters
+        network_structure['forward_model'] = list()
+        network_structure['forward_model'].append({"units":256})
+        network_structure['forward_model'].append({"units":256})
+        network_structure['forward_model'].append({"units":256})
+        network_structure['forward_model'].append({"units":256})
+        # Inverse model parameters
+        network_structure['inverse_model'] = list()
+        network_structure['inverse_model'].append({"units":256})
+        network_structure['inverse_model'].append({"units":256})
+        network_structure['inverse_model'].append({"units":256})
+        network_structure['inverse_model'].append({"units":256})
+        
+        self.nnet = NeuralNetwork(
+            input_shape=self.state_shape,
+            output_dim=self.action_dim,
+            network_structure=network_structure,
+            verbose=self.verbose
+        )
+
+    def train(self, dataset, epochs, batch_size):
+        self.nnet.fit(dataset, epochs, batch_size)
 
     def update(self, dataset):
+        self.nnet.update(dataset)
+
+    def get_intrinsic_rewards(self, states_set):
+        intrinsic_rewards = self.nnet.get_intrinsic_rewards(states_set)
+        return intrinsic_rewards
 
     def evaluate_function(self, state):
+        action_prob = self.nnet.predict(state)
+        return action_prob
 
     def play(self, state):
+        action_prob = self.evaluate_function(state)
+        N = len(action_prob)
+        start_index = np.argmax(action_prob[:int(N/2)])
+        end_index = np.argmax(action_prob[int(N/2):])
+        return start_index, end_index
 
     def save_nnet(self, filename):
+        self.nnet.save_models(filename)
 
     def load_nnet(self, filename):
+        self.nnet.load_models(filename)
 
     def plot_nnet(self, filename):
+        self.nnet.plot_models(filename)
