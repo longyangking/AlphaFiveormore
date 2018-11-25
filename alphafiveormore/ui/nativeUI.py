@@ -113,6 +113,15 @@ class nativeUI(QWidget):
             self.has_picked = False
             self.update()
 
+    def keyPressEvent(self, e):
+        mode = -1
+
+        if e.key() == Qt.Key_Escape:
+            self.close()
+        if e.key() == Qt.Key_Space:
+            action = (-1, -1)
+            self.playsignal.emit((-1, -1))
+
     def chooseChess(self,qp):
         #qp.setBrush(QColor(0, 0, 0))
         qp.setPen(QColor(0, 255, 255))

@@ -5,7 +5,7 @@ __author__ = "Yang Long"
 __version__ = "0.0.1"
 
 __default_state_shape__ = 10, 10, 1
-__filename__ = "model.h5"
+__filename__ = "model"
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=
@@ -26,7 +26,27 @@ if __name__ == "__main__":
 
     if args.train:
         if verbose:
-            print("Continue to train AI model for the game.")
+            print("Continue to train AI model with state vector: [{0}].".format(__default_state_shape__))
+
+        from ai import AI
+        from train import TrainAI
+
+        ai = AI(state_shape=__default_state_shape__, verbose=verbose)
+        if verbose:
+            print("loading latest model: [{0}] ...".format(__filename__),end="")
+        ai.load_nnet(__filename__)
+        if verbose:
+            print("load OK!")
+
+        trainai = TrainAI(
+            state_shape=__default_state_shape__,
+            ai=ai,
+            verbose=verbose
+        )
+        trainai.start(filename=__filename__)
+
+        if verbose:
+            print("The latest AI model is saved as [{0}]".format(__filename__))
 
     if args.retrain:
         if verbose:
@@ -43,7 +63,18 @@ if __name__ == "__main__":
     if args.playai:
         print("Play \"Five or More\" game by AI. Please close game in terminal after closing window (i.e, Press Ctrl+C).")
         
-        # TODO Play Game with AI model
+        from ai import AI
+        from game import GameEngine
+
+        ai = AI(state_shape=__default_state_shape__, action_dim=5, verbose=verbose)
+        if verbose:
+            print("loading latest model: [{0}] ...".format(__filename__),end="")
+        ai.load_nnet(__filename__)
+        if verbose:
+            print("load OK!")
+
+        gameengine = GameEngine(state_shape=__default_state_shape__, ai=ai, verbose=verbose)
+        gameengine.start_ai()
 
     if args.play:
         print("Play \"Five or More\" game. Please close game in terminal after closing window (i.e, Press Ctrl+C).")

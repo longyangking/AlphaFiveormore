@@ -219,20 +219,25 @@ class NeuralNetwork:
 
         if self.verbose:
             print("Updating neural network of action model...")
-        self.action_model.fit(states, action_probs, epochs=epochs, batch_size=batch_size, verbose=self.verbose)
+        history_action_model = self.action_model.fit(states, action_probs, epochs=epochs, batch_size=batch_size, verbose=self.verbose)
 
         if self.verbose:
             print("Updating neural network of inverse model...")
-        self.train_inverse_model.fit([states, states_next], action_probs, epochs=epochs, batch_size=batch_size, verbose=self.verbose)
+        history_inverse_model = self.train_inverse_model.fit([states, states_next], action_probs, epochs=epochs, batch_size=batch_size, verbose=self.verbose)
 
         if self.verbose:
             print("Updating neural network of forward model...")
         features = self.feature_model.predict(states)
         features_next = self.feature_model.predict(states_next)
-        self.train_forward_model.fit([action_probs, features], features_next, epochs=epochs, batch_size=batch_size, verbose=self.verbose)
+        history_forward_model = self.train_forward_model.fit([action_probs, features], features_next, epochs=epochs, batch_size=batch_size, verbose=self.verbose)
 
         if self.verbose:
             print("End of updating neural network.")
+        
+        loss_action = history_action_model.history['loss'][-1]
+        loss_inverse = history_inverse_model.history['loss'][-1]
+        loss_forward = history_forward_model.history['loss'][-1]
+        return loss_action, loss_inverse, loss_forward
 
     def get_intrinsic_rewards(self, states_set):
         states, action_probs, states_next = dataset
@@ -303,9 +308,10 @@ class AI:
     '''
     The main AI model class
     '''
-    def __init__(self, state_shape, action_dim, verbose=False):
+    def __init__(self, state_shape, verbose=False):
         self.state_shape = state_shape
-        self.action_dim = action_dim
+        Nx, Ny, channel = state_shape
+        self.action_dim  = 2*Nx*Ny # action probability of start_index and end_index
         self.verbose = verbose
 
         network_structure = dict()
@@ -344,8 +350,12 @@ class AI:
             verbose=self.verbose
         )
 
+    def get_action_dim(self):
+        return self.action_dim
+
     def train(self, dataset, epochs, batch_size):
-        self.nnet.fit(dataset, epochs, batch_size)
+        loss = self.nnet.fit(dataset, epochs, batch_size)
+        return loss
 
     def update(self, dataset):
         self.nnet.update(dataset)
@@ -358,11 +368,23 @@ class AI:
         action_prob = self.nnet.predict(state)
         return action_prob
 
-    def play(self, state):
+    def play(self, state, availables):
         action_prob = self.evaluate_function(state)
-        N = len(action_prob)
-        start_index = np.argmax(action_prob[:int(N/2)])
-        end_index = np.argmax(action_prob[int(N/2):])
+        N = int(self.action_dim/2)
+        start_prob = action_prob[:N]
+        end_prob = action_prob[N:]
+
+        # Only available positions can be applied
+        eps = 1e-12
+        have_chesses = [index for index in range(N) if index not in availables]
+        start_prob[availables] = 0.0
+        end_prob[have_chesses] = 0.0
+
+        start_prob = start_prob/(np.sum(start_prob) + eps)
+        end_prob = end_prob/(np.sum(end_prob) + eps)
+
+        start_index = np.argmax(start_prob)
+        end_index = np.argmax(end_prob)
         return start_index, end_index
 
     def save_nnet(self, filename):

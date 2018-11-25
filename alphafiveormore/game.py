@@ -136,7 +136,8 @@ class GameEngine:
         self.states.append(state)
 
     def pressaction(self, action):
-        self.flag = self.gameboard.play(action=action)
+        if action != (-1, -1):
+            self.flag = self.gameboard.play(action=action)
 
     def start(self):
         '''
@@ -160,15 +161,67 @@ class GameEngine:
         score = self.gameboard.get_score()
         ui.gameend(score)
 
+    def pressaction_ai(self, action):
+        if action == (-1, -1): # press space
+            state = self.get_state()
+            action = self.ai.play(state)
+            self.flag = self.gameboard.play(action=action)
+
     def start_ai(self):
-        pass
+        '''
+        Start to play "Five or more" game for human
+        '''
+        Nx, Ny, channel = self.state_shape
+        self.gameboard = Board(board_shape=(Nx, Ny))
+        self.gameboard.init()
+
+        if self.verbose:
+            print("Initiating UI...")
+
+        from ui import UI
+        ui = UI(pressaction=self.pressaction_ai, board=self.gameboard.get_board(), sizeunit=50)
+        ui.start()
+
+        while not self.flag:
+            board = self.gameboard.get_board()
+            ui.setboard(board)
+
+        score = self.gameboard.get_score()
+        ui.gameend(score)
 
     def start_selfplay(self, epsilon, gamma):
         '''
         Start self-play process to get train data for AI model
         '''
-        action_Q = list()
+        self.gameboard = Board(board_shape=(Nx, Ny))
+        self.gameboard.init()
 
+        board = self.gameboard.get_board()
+        self.boards.append(board)
+
+        while not self.flag:
+            self.update_states()
+
+            state = self.get_state()
+            availables = self.gameboard.get_availables()
+
+            action = self.ai.play(state, availables)    
+            # TODO 
+            # 1. Choose action based on the deep Q-value
+            # 2. Record the rewards and train networks
+
+            self.actions.append(action)
+            score = self.gameboard.get_score()
+            self.scores.append(score)
+            self.flag = self.gameboard.play(action)
+
+            board = self.gameboard.get_board()
+            self.boards.append(board)
+
+        action_Q = list()
         # Intrinsic reward and external reward
+        intrinsic_rewards = self.ai.get_intrinsic_rewards(self.states)
+        for i in len(self.states):
+            pass
 
         return self.states, action_Q
