@@ -47,10 +47,12 @@ class TrainAI:
             print("End of self-play process with data size [{0}] and cost time [{1:.1f}s].".format(
                 len(action_values),  (endtime - starttime)))
 
-        states = np.array(states)
+        #states = np.array(states)
         action_values = np.array(action_values)
+        next_states = states[:-1]
+        next_states.append(None)
 
-        return states, action_values
+        return states, action_values, next_states
 
     def update_ai(self, dataset):
         if self.verbose:

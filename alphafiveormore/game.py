@@ -124,6 +124,7 @@ class GameEngine:
         self.states = list()
         self.boards = list()
         self.actions = list()
+        self.action_probs = list()
         self.scores = list()
 
     def get_state(self):
@@ -189,7 +190,7 @@ class GameEngine:
         score = self.gameboard.get_score()
         ui.gameend(score)
 
-    def start_selfplay(self, epsilon, gamma):
+    def start_selfplay(self, epsilon, gamma, beta=0.1):
         '''
         Start self-play process to get train data for AI model
         '''
@@ -201,16 +202,26 @@ class GameEngine:
 
         while not self.flag:
             self.update_states()
-
             state = self.get_state()
+
             availables = self.gameboard.get_availables()
+            action_prob = self.ai.evaluate_function(state, availables)
+            self.action_probs.append(action_prob)
 
-            action = self.ai.play(state, availables)    
-            # TODO 
-            # 1. Choose action based on the deep Q-value
-            # 2. Record the rewards and train networks
-
+            v = np.random.random()
+            if v > epsilon:
+                # Sample an action randomly to explore the hidden or potential approaches
+                action = np.zeros(2*Nx*Ny)
+                chess_availables = [index for index in range(Nx*Ny) if index not in availables]
+                start_index = np.random.choice(chess_availables)
+                action[start_index] = 1
+                end_index = np.random.choice(availables)
+                action[Nx*Ny + end_index] = 1
+            else:
+                # Perform an action based on deep learning model
+                action = self.ai.play(state, availables)    
             self.actions.append(action)
+
             score = self.gameboard.get_score()
             self.scores.append(score)
             self.flag = self.gameboard.play(action)
@@ -218,10 +229,50 @@ class GameEngine:
             board = self.gameboard.get_board()
             self.boards.append(board)
 
-        action_Q = list()
-        # Intrinsic reward and external reward
-        intrinsic_rewards = self.ai.get_intrinsic_rewards(self.states)
-        for i in len(self.states):
-            pass
+        N = len(self.states)
+        Nx, Ny, channel = self.state_shape
 
-        return self.states, action_Q
+        states = self.states
+        current_states = states
+        next_states = states[1:]
+        next_states.append(None)
+        actions = list()
+        for i in range(N):
+            start_index, end_index = self.actions[i]
+            action = np.zeros(2*Nx*Ny)
+            action[start_index] = 1
+            action[Nx*Ny + end_index] = 1
+            actions.append(action)
+
+        dataset = current_states, actions, next_states
+        intrinsic_rewards = self.ai.get_intrinsic_rewards(dataset)
+        external_rewards = self.scores
+
+        action_probs = list()
+        for i in range(N):
+            if i == 0:
+                previous_reward =  0
+            else:
+                previous_reward = external_rewards[i-1] + intrinsic_rewards[i-1]
+            if i < N-1:
+                current_reward = external_rewards[i] + intrinsic_rewards[i]
+            else:
+                current_reward = 0
+            # Define the improvement based on the difference of rewards
+            reward = current_reward - previous_reward
+
+            start_index, end_index = self.actions[i]
+            action_prob = self.action_probs[i]
+
+            # Define Q value with help of logistic function, restrict it into the range [0,1]
+            Q_value = gamma/(1 + np.exp(-beta*reward))
+
+            eps = 1e-12
+            action_prob[start_index] += Q_value
+            action_prob[start_index] = action_prob[start_index]/(np.sum(action_prob[start_index]) + eps)
+            action_prob[Nx*Ny + end_index] += Q_value
+            action_prob[Nx*Ny + end_index] = action_prob[Nx*Ny + end_index]/(np.sum(action_prob[Nx*Ny + end_index]) + eps)
+
+            action_probs.append(action_prob)
+
+        return self.states, action_probs

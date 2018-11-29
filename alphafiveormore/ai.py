@@ -30,9 +30,13 @@ class NeuralNetwork:
         self.eta = eta
         self.verbose = verbose
 
+        # The action model perform the Q values of actions base on the states 
         self.action_model = self.build_action_model()
+        # The feature model abstract the states into the feature vectors
         self.feature_model = self.build_feature_model()
+        # The forward model predict the feature vectors of the future states based on the current actions and states
         self.forward_model = self.build_forward_model()
+        # The inverse model derive the selected actions based on the current states and the future states
         self.inverse_model = self.build_inverse_model()
 
         self.action_model.compile(
@@ -223,12 +227,13 @@ class NeuralNetwork:
 
         if self.verbose:
             print("Updating neural network of inverse model...")
-        history_inverse_model = self.train_inverse_model.fit([states, states_next], action_probs, epochs=epochs, batch_size=batch_size, verbose=self.verbose)
+        N = len(states)
+        history_inverse_model = self.train_inverse_model.fit([states[:N-1], states_next[:N-1]], action_probs, epochs=epochs, batch_size=batch_size, verbose=self.verbose)
 
         if self.verbose:
             print("Updating neural network of forward model...")
-        features = self.feature_model.predict(states)
-        features_next = self.feature_model.predict(states_next)
+        features = self.feature_model.predict(states[:N-1])
+        features_next = self.feature_model.predict(states_next[:N-1])
         history_forward_model = self.train_forward_model.fit([action_probs, features], features_next, epochs=epochs, batch_size=batch_size, verbose=self.verbose)
 
         if self.verbose:
@@ -239,11 +244,12 @@ class NeuralNetwork:
         loss_forward = history_forward_model.history['loss'][-1]
         return loss_action, loss_inverse, loss_forward
 
-    def get_intrinsic_rewards(self, states_set):
+    def get_intrinsic_rewards(self, dataset):
         states, action_probs, states_next = dataset
-        features = self.feature_model.predict(states)
-        features_next = self.feature_model.predict(states_next)
-        features_next_predict = self.forward_model.predict([action_probs, features])
+        N = len(states)
+        features = self.feature_model.predict(states[:N-1])
+        features_next = self.feature_model.predict(states_next[:N-1])
+        features_next_predict = self.forward_model.predict([action_probs[:N-1], features])
 
         intrinsic_rewards = self.eta/2*np.sum(np.abs(features_next - features_next_predict), axis=1)
         return intrinsic_rewards
@@ -364,12 +370,8 @@ class AI:
         intrinsic_rewards = self.nnet.get_intrinsic_rewards(states_set)
         return intrinsic_rewards
 
-    def evaluate_function(self, state):
+    def evaluate_function(self, state, availables):
         action_prob = self.nnet.predict(state)
-        return action_prob
-
-    def play(self, state, availables):
-        action_prob = self.evaluate_function(state)
         N = int(self.action_dim/2)
         start_prob = action_prob[:N]
         end_prob = action_prob[N:]
@@ -382,6 +384,15 @@ class AI:
 
         start_prob = start_prob/(np.sum(start_prob) + eps)
         end_prob = end_prob/(np.sum(end_prob) + eps)
+
+        action_prob = np.concatenate([start_prob, end_prob])
+        return action_prob
+
+    def play(self, state, availables):
+        action_prob = self.evaluate_function(state)
+        N = int(self.action_dim/2)
+        start_prob = action_prob[:N]
+        end_prob = action_prob[N:]
 
         start_index = np.argmax(start_prob)
         end_index = np.argmax(end_prob)

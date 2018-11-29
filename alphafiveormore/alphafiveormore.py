@@ -5,7 +5,7 @@ __author__ = "Yang Long"
 __version__ = "0.0.1"
 
 __default_state_shape__ = 10, 10, 1
-__filename__ = "model"
+__filename__ = "fom_ai"
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=
