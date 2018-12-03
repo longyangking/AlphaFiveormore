@@ -27,6 +27,7 @@ class nativeUI(QWidget):
 
         self.has_picked = False
         self.isgameend = False
+        self.score = 0
 
         self.pressaction = pressaction
 
@@ -69,9 +70,9 @@ class nativeUI(QWidget):
             self.drawgameend(qp)
         qp.end()
 
-    def gameend(self,winner):
+    def gameend(self,score):
         self.isgameend = True
-        self.winner = winner
+        self.score = score
 
     def drawgameend(self,qp):
         size =  self.geometry()
@@ -85,7 +86,7 @@ class nativeUI(QWidget):
         font = qp.font()
         font.setPixelSize(60)
         qp.setFont(font)
-        qp.drawText(QRect(size.width()/2-width/2, size.height()/2-height/2, width, height),	0x0004|0x0080,str(self.winner + " Win"))
+        qp.drawText(QRect(size.width()/2-width/2, size.height()/2-height/2, width, height),	0x0004|0x0080,str("Score: {0}".format(self.score)))
 
     def mouseMoveEvent(self,e):
         self.mousex = int(e.x()/self.sizeunit)
@@ -119,7 +120,7 @@ class nativeUI(QWidget):
         if e.key() == Qt.Key_Escape:
             self.close()
         if e.key() == Qt.Key_Space:
-            action = (-1, -1)
+            code = (-1, -1)
             self.playsignal.emit((-1, -1))
 
     def chooseChess(self,qp):

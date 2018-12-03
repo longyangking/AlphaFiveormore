@@ -1,4 +1,6 @@
 from ai import AI
+import time
+import numpy as np
 from game import GameEngine
 
 class TrainAI:
@@ -58,7 +60,7 @@ class TrainAI:
         if self.verbose:
             print("Start to update the network of AI model...")
 
-        loss = self.ai.train(dataset, epochs=30, batch_size=32)
+        loss = self.ai.train(dataset, epochs=3, batch_size=32)
 
         if self.verbose:
             print("End of updating with final loss [{0}]".format(loss))
@@ -70,8 +72,8 @@ class TrainAI:
         Main training process
         '''
         n_epochs = 1000
-        n_rounds = 30
-        n_checkpoints = 10
+        n_rounds = 5
+        n_checkpoints = 2
 
         if self.verbose:
             print("Train AI model with epochs: [{0}]".format(n_epochs))

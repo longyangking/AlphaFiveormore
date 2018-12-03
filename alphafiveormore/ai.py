@@ -53,14 +53,14 @@ class NeuralNetwork:
 
         predict_action_tensor = self.inverse_model([feature_tensor_t, feature_tensor_t1])
 
-        self.train_inverse_model = Model(inputs=[state_tensor_t, state_tensor_t1], outputs=action_tensor)
+        self.train_inverse_model = Model(inputs=[state_tensor_t, state_tensor_t1], outputs=predict_action_tensor)
         self.train_inverse_model.compile(
             loss='mse',
             optimizer='adam'
         )
 
         feature_tensor_t = Input(shape=(self.feature_dim,))
-        action_tensor = Input(shape=(self.action_dim,))
+        action_tensor = Input(shape=(self.output_dim,))
 
         predict_feature_tensor_t1 = self.forward_model([action_tensor, feature_tensor_t])
 
@@ -87,12 +87,10 @@ class NeuralNetwork:
                     if not is_flatten:
                         out = Flatten()(out)
                         is_flatten = True
-                    else:
-                        out = self.__dense_block(units=structure['units'])
+                    out = self.__dense_block(out, units=structure['units'])
 
         action_tensor = Dense(
             self.output_dim,
-            self.feature_dim,
             activation='sigmoid', 
             use_bias=False, 
             kernel_initializer='glorot_uniform', 
@@ -118,8 +116,7 @@ class NeuralNetwork:
                     if not is_flatten:
                         out = Flatten()(out)
                         is_flatten = True
-                    else:
-                        out = self.__dense_block(units=structure['units'])
+                    out = self.__dense_block(out, units=structure['units'])
 
         feature_tensor = Dense(
             self.feature_dim, 
@@ -168,7 +165,7 @@ class NeuralNetwork:
             out = self.__dense_block(out, structure['units'])
 
         action_tensor = Dense(
-            self.action_dim,
+            self.output_dim,
             activation='sigmoid', 
             use_bias=False, 
             kernel_initializer='glorot_uniform', 
@@ -184,8 +181,7 @@ class NeuralNetwork:
             padding='same',
             activation='linear',
             kernel_initializer=initializers.lecun_normal(),
-            kernel_constraints=regularizers.l2(self.l2_const)
-        )(x)
+            kernel_regularizer=regularizers.l2(self.l2_const))(x)
         out = BatchNormalization(axis=1, momentum=0.9)(out)
         out = LeakyReLU(alpha=0.1)(out)
         return out
@@ -197,7 +193,7 @@ class NeuralNetwork:
             padding='same',
             activation='linear',
             kernel_initializer=initializers.glorot_normal(),
-            kernel_constraints=regularizers.l2(self.l2_const)
+            kernel_regularizer=regularizers.l2(self.l2_const)
         )(x)
         out = BatchNormalization(axis=1, momentum=0.9)(out)
         out = Add()([out, x])
@@ -223,18 +219,18 @@ class NeuralNetwork:
 
         if self.verbose:
             print("Updating neural network of action model...")
-        history_action_model = self.action_model.fit(states, action_probs, epochs=epochs, batch_size=batch_size, verbose=self.verbose)
+        history_action_model = self.action_model.fit(np.array(states), action_probs, epochs=epochs, batch_size=batch_size, verbose=self.verbose)
 
         if self.verbose:
             print("Updating neural network of inverse model...")
         N = len(states)
-        history_inverse_model = self.train_inverse_model.fit([states[:N-1], states_next[:N-1]], action_probs, epochs=epochs, batch_size=batch_size, verbose=self.verbose)
+        history_inverse_model = self.train_inverse_model.fit([np.array(states[:N-1]), np.array(states_next[:N-1])], np.array(action_probs[:N-1]), epochs=epochs, batch_size=batch_size, verbose=self.verbose)
 
         if self.verbose:
             print("Updating neural network of forward model...")
-        features = self.feature_model.predict(states[:N-1])
-        features_next = self.feature_model.predict(states_next[:N-1])
-        history_forward_model = self.train_forward_model.fit([action_probs, features], features_next, epochs=epochs, batch_size=batch_size, verbose=self.verbose)
+        features = self.feature_model.predict(np.array(states[:N-1]))
+        features_next = self.feature_model.predict(np.array(states_next[:N-1]))
+        history_forward_model = self.train_forward_model.fit([np.array(action_probs[:N-1]), features], features_next, epochs=epochs, batch_size=batch_size, verbose=self.verbose)
 
         if self.verbose:
             print("End of updating neural network.")
@@ -247,9 +243,9 @@ class NeuralNetwork:
     def get_intrinsic_rewards(self, dataset):
         states, action_probs, states_next = dataset
         N = len(states)
-        features = self.feature_model.predict(states[:N-1])
-        features_next = self.feature_model.predict(states_next[:N-1])
-        features_next_predict = self.forward_model.predict([action_probs[:N-1], features])
+        features = self.feature_model.predict(np.array(states[:N-1]))
+        features_next = self.feature_model.predict(np.array(states_next[:N-1]))
+        features_next_predict = self.forward_model.predict([np.array(action_probs[:N-1]), features])
 
         intrinsic_rewards = self.eta/2*np.sum(np.abs(features_next - features_next_predict), axis=1)
         return intrinsic_rewards
@@ -389,7 +385,7 @@ class AI:
         return action_prob
 
     def play(self, state, availables):
-        action_prob = self.evaluate_function(state)
+        action_prob = self.evaluate_function(state, availables)
         N = int(self.action_dim/2)
         start_prob = action_prob[:N]
         end_prob = action_prob[N:]

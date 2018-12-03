@@ -8,7 +8,7 @@ Play "Five or More" game with Artificial intelligence
 + Curiosity-driven Exploration by Self-supervised Prediction [1,2]
 
 ## Status
-Working on it...
+GameEngine Debugging... Working on it
 
 ## References
 1. Pathak, Deepak, et al. "Curiosity-driven exploration by self-supervised prediction." International Conference on Machine Learning (ICML). Vol. 2017. 2017.

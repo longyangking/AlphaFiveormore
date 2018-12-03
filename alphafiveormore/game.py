@@ -1,6 +1,5 @@
 import numpy as np 
 
-
 COLOR_TABLE = {
     'null':0,
     'red':1,
@@ -73,7 +72,11 @@ class Board:
 
         # bug: if the number of existing places is less than the release number
 
-        indexs = np.random.choice(self.availables, self.n_release, replace=False)
+        if len(self.availables) > self.n_release:
+            indexs = np.random.choice(self.availables, self.n_release, replace=False)
+        else:
+            indexs = self.availables
+
         for index in indexs:
             position = (index%Nx, int(index/Nx))
             color = np.random.choice(N_COLORS) + 1  # +1 means bias
@@ -101,7 +104,7 @@ class Board:
 
         if end_index in self.availables:
             self.availables.remove(end_index)
-        if start_position not in self.availables:
+        if start_index not in self.availables:
             self.availables.append(start_index)
 
         self.board[start_position], self.board[end_position] = self.board[end_position], self.board[start_position]
@@ -127,6 +130,8 @@ class GameEngine:
         self.action_probs = list()
         self.scores = list()
 
+        self.ui = None
+
     def get_state(self):
         return self.states[-1]
 
@@ -139,6 +144,11 @@ class GameEngine:
     def pressaction(self, action):
         if action != (-1, -1):
             self.flag = self.gameboard.play(action=action)
+            if self.flag:
+                self.end_ui()
+            else:
+                board = self.gameboard.get_board()
+                self.ui.setboard(board)
 
     def start(self):
         '''
@@ -151,23 +161,37 @@ class GameEngine:
         if self.verbose:
             print("Initiating UI...")
 
-        from ui import UI
-        ui = UI(pressaction=self.pressaction, board=self.gameboard.get_board(), sizeunit=50)
-        ui.start()
+        from ui import UI, init_ui
+        app = init_ui()
+        self.ui = UI(pressaction=self.pressaction, board=self.gameboard.get_board(), sizeunit=50)
+        app.exec_()
 
-        while not self.flag:
-            board = self.gameboard.get_board()
-            ui.setboard(board)
-
+    def end_ui(self):
         score = self.gameboard.get_score()
-        ui.gameend(score)
+        self.ui.gameend(score)
 
-    def pressaction_ai(self, action):
-        if action == (-1, -1): # press space
+    def pressaction_ai(self, code):
+        if code == (-1, -1): # press space
+            # Evaluate the play vector
             state = self.get_state()
-            action = self.ai.play(state)
+            availables = self.gameboard.get_availables()
+            action = self.ai.play(state, availables) 
+            if self.verbose:
+                print("AI action: [{0}]".format(action))
             self.flag = self.gameboard.play(action=action)
 
+            # Game end?
+            if self.flag:
+                self.end_ui()
+            else:
+                board = self.gameboard.get_board()
+                self.ui.setboard(board)
+
+            # Update states
+            board = self.gameboard.get_board()
+            self.boards.append(board)
+            self.update_states()
+        
     def start_ai(self):
         '''
         Start to play "Five or more" game for human
@@ -176,24 +200,27 @@ class GameEngine:
         self.gameboard = Board(board_shape=(Nx, Ny))
         self.gameboard.init()
 
+        board = self.gameboard.get_board()
+        self.boards.append(board)
+        self.update_states()
+
+        state = self.get_state()
+        availables = self.gameboard.get_availables()
+        action = self.ai.play(state, availables)
+
         if self.verbose:
             print("Initiating UI...")
 
-        from ui import UI
-        ui = UI(pressaction=self.pressaction_ai, board=self.gameboard.get_board(), sizeunit=50)
-        ui.start()
-
-        while not self.flag:
-            board = self.gameboard.get_board()
-            ui.setboard(board)
-
-        score = self.gameboard.get_score()
-        ui.gameend(score)
+        from ui import UI, init_ui
+        app = init_ui()
+        self.ui = UI(pressaction=self.pressaction_ai, board=self.gameboard.get_board(), sizeunit=50)
+        app.exec_()
 
     def start_selfplay(self, epsilon, gamma, beta=0.1):
         '''
         Start self-play process to get train data for AI model
         '''
+        Nx, Ny, channel = self.state_shape
         self.gameboard = Board(board_shape=(Nx, Ny))
         self.gameboard.init()
 
@@ -205,27 +232,30 @@ class GameEngine:
             state = self.get_state()
 
             availables = self.gameboard.get_availables()
-            action_prob = self.ai.evaluate_function(state, availables)
-            self.action_probs.append(action_prob)
 
             v = np.random.random()
             if v > epsilon:
                 # Sample an action randomly to explore the hidden or potential approaches
-                action = np.zeros(2*Nx*Ny)
+                action_prob = np.zeros(2*Nx*Ny)
                 chess_availables = [index for index in range(Nx*Ny) if index not in availables]
                 start_index = np.random.choice(chess_availables)
-                action[start_index] = 1
+                action_prob[start_index] = 1
                 end_index = np.random.choice(availables)
-                action[Nx*Ny + end_index] = 1
+                action_prob[Nx*Ny + end_index] = 1
+                action = start_index, end_index
             else:
                 # Perform an action based on deep learning model
-                action = self.ai.play(state, availables)    
+                action_prob = self.ai.evaluate_function(state, availables)
+                
+                action = self.ai.play(state, availables) 
+
+            self.action_probs.append(action_prob)   
             self.actions.append(action)
 
             score = self.gameboard.get_score()
             self.scores.append(score)
             self.flag = self.gameboard.play(action)
-
+            
             board = self.gameboard.get_board()
             self.boards.append(board)
 

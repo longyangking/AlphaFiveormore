@@ -46,7 +46,10 @@ if __name__ == "__main__":
         trainai.start(filename=__filename__)
 
         if verbose:
-            print("The latest AI model is saved as [{0}]".format(__filename__))
+            print("The latest AI model is saved as [{0}].".format(__filename__))
+
+        if verbose:
+            print("The structures of AI model are plotted as [{0}].".format(__filename__))
 
     if args.retrain:
         if verbose:
@@ -66,7 +69,7 @@ if __name__ == "__main__":
         from ai import AI
         from game import GameEngine
 
-        ai = AI(state_shape=__default_state_shape__, action_dim=5, verbose=verbose)
+        ai = AI(state_shape=__default_state_shape__, verbose=verbose)
         if verbose:
             print("loading latest model: [{0}] ...".format(__filename__),end="")
         ai.load_nnet(__filename__)
