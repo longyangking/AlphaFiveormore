@@ -70,8 +70,6 @@ class Board:
     def release(self):
         Nx, Ny = self.board_shape
 
-        # bug: if the number of existing places is less than the release number
-
         if len(self.availables) > self.n_release:
             indexs = np.random.choice(self.availables, self.n_release, replace=False)
         else:
@@ -83,15 +81,45 @@ class Board:
             self.board[position] = color
             self.availables.remove(index)
 
+    def clear_board(self):
+        Nx, Ny = self.board_shape
+        indexs = list()
+        score = 0
+
+        # TODO The mechanism to eliminate chesses on board and calculate the score
+
+        for j in range(Ny):
+            for i in range(Nx-5):
+                if self.board[i,j] != 0:
+                    flag = (self.board[i,j] == self.board[i+1,j] == self.board[i+2,j] == self.board[i+3,j] == self.board[i+4,j])
+                    if flag:
+                        score += 1
+                        for m in range(5):
+                            self.board[i+m, j] = 0
+                            index = i + m + j*Nx
+                            indexs.append(index)
+
+        for i in range(Nx):
+            for j in range(Ny-5):
+                if self.board[i,j] != 0:
+                    flag = (self.board[i,j] == self.board[i,j+1] == self.board[i,j+2] == self.board[i,j+3] == self.board[i,j+4])
+                    if flag:
+                        score += 1
+                        for m in range(5):
+                            self.board[i, j+m] = 0
+                            index = i + (j + m)*Nx
+                            indexs.append(index)
+
+        self.score += score            
+        self.availables.extend(indexs)
+
     def update(self):
         '''
         Return the current status of board, is_end?
         '''
-        
         self.release()
-
-        # Delete the satisfying blocks
-
+        self.clear_board()
+    
         flag = (len(self.availables) == 0)
         return flag
 
@@ -110,7 +138,7 @@ class Board:
         self.board[start_position], self.board[end_position] = self.board[end_position], self.board[start_position]
         flag = self.update() 
 
-        # Judge whether this operation is valid: A possible tranport path exist?
+        # TODO Judge whether this operation is valid: A possible tranport path exist?
 
         return flag
 
@@ -148,7 +176,9 @@ class GameEngine:
                 self.end_ui()
             else:
                 board = self.gameboard.get_board()
+                score = self.gameboard.get_score()
                 self.ui.setboard(board)
+                self.ui.setscore(score)
 
     def start(self):
         '''
@@ -178,6 +208,7 @@ class GameEngine:
             action = self.ai.play(state, availables) 
             if self.verbose:
                 print("AI action: [{0}]".format(action))
+            
             self.flag = self.gameboard.play(action=action)
 
             # Game end?
@@ -185,12 +216,9 @@ class GameEngine:
                 self.end_ui()
             else:
                 board = self.gameboard.get_board()
+                score = self.gameboard.get_score()
                 self.ui.setboard(board)
-
-            # Update states
-            board = self.gameboard.get_board()
-            self.boards.append(board)
-            self.update_states()
+                self.ui.setscore(score)
         
     def start_ai(self):
         '''

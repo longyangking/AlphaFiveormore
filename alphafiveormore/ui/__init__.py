@@ -23,6 +23,11 @@ class UI:
         while self.UI is None:
             pass
         self.UI.setboard(board=board)
+
+    def setscore(self,score):
+        while self.UI is None:
+            pass
+        self.UI.setscore(score=score)
     
     def gameend(self, score):
         while self.UI is None:

@@ -41,6 +41,11 @@ class nativeUI(QWidget):
         self.board = board
         self.update()
 
+    def setscore(self,score):
+        self.score = score
+        self.setWindowTitle("Five or More. Score: [{0}]".format(self.score))
+        self.update()
+
     def initUI(self):
         (Nx,Ny) = self.board.shape
         screen = QDesktopWidget().screenGeometry()
@@ -49,7 +54,7 @@ class nativeUI(QWidget):
         self.setGeometry((screen.width()-size.width())/2, 
                         (screen.height()-size.height())/2,
                         Nx*self.sizeunit, Ny*self.sizeunit)
-        self.setWindowTitle("Five or More")
+        self.setWindowTitle("Five or More. Score: [{0}]".format(self.score))
         self.setWindowIcon(QIcon('./ui/icon.png'))
 
         # set Background color
@@ -73,6 +78,7 @@ class nativeUI(QWidget):
     def gameend(self,score):
         self.isgameend = True
         self.score = score
+        self.update()
 
     def drawgameend(self,qp):
         size =  self.geometry()
@@ -121,7 +127,8 @@ class nativeUI(QWidget):
             self.close()
         if e.key() == Qt.Key_Space:
             code = (-1, -1)
-            self.playsignal.emit((-1, -1))
+            if not self.isgameend:
+                self.playsignal.emit((-1, -1))
 
     def chooseChess(self,qp):
         #qp.setBrush(QColor(0, 0, 0))
