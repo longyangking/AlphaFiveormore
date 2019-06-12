@@ -1,5 +1,5 @@
 # AlphaFiveormore
-Play "Five or More" game with Artificial intelligence
+Play "Five or More" game with Artificial intelligence 
 
 ![](./pics/fiveormore.png)
 
